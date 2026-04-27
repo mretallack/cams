@@ -231,6 +231,58 @@ height="80">](https://f-droid.org/packages/com.vladpen.cams/)
 alt="Доступно в RuStore"
 height="57">](https://apps.rustore.ru/app/com.vladpen.cams)
 
+## CI/CD Pipeline
+
+The project uses GitHub Actions (`.github/workflows/android-ci.yml`) for continuous integration and release distribution.
+
+### Triggers
+
+- **Push/PR to `main` or `dev`**: Runs build, lint, and unit tests
+- **GitHub Release published**: Builds signed APKs and distributes via Firebase
+
+### Jobs
+
+| Job | Trigger | Description |
+|-----|---------|-------------|
+| build | push/PR | Assembles debug APKs, uploads as artifacts |
+| lint | push/PR | Runs Android lint (non-blocking) |
+| test | push/PR | Runs unit tests |
+| release | GitHub Release | Builds signed release APKs, attaches to release, distributes arm64 APK to Firebase testers |
+
+### GitHub Secrets Required
+
+| Secret | Description |
+|--------|-------------|
+| `KEYSTORE_BASE64` | Release keystore, base64-encoded (`base64 -w 0 release.keystore`) |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias (e.g. `cams`) |
+| `KEY_PASSWORD` | Key password |
+| `FIREBASE_APP_ID` | Firebase App ID (from Firebase Console → Project Settings → Your Apps) |
+| `FIREBASE_SERVICE_ACCOUNT` | Firebase service account JSON with App Distribution Admin role |
+
+### Signing Configuration
+
+Release builds are signed via environment variables in `app/build.gradle`. When `KEYSTORE_PATH` is set (CI), the release signing config is used. Locally, it falls back to debug signing.
+
+To generate a new keystore:
+```bash
+keytool -genkey -v -keystore release.keystore -alias cams -keyalg RSA -keysize 2048 -validity 10000
+```
+
+To push secrets using `gh` CLI:
+```bash
+base64 -w 0 release.keystore | gh secret set KEYSTORE_BASE64 -R mretallack/cams
+echo -n "<password>" | gh secret set KEYSTORE_PASSWORD -R mretallack/cams
+echo -n "cams" | gh secret set KEY_ALIAS -R mretallack/cams
+echo -n "<password>" | gh secret set KEY_PASSWORD -R mretallack/cams
+gh secret set FIREBASE_SERVICE_ACCOUNT -R mretallack/cams < service-account.json
+echo -n "<app-id>" | gh secret set FIREBASE_APP_ID -R mretallack/cams
+```
+
+### Firebase App Distribution
+
+Signed arm64-v8a APKs are distributed to the `testers` group in Firebase App Distribution on each release. To manage testers, go to Firebase Console → App Distribution → Testers & Groups.
+
 ## Release Procedure
 
 ### Prerequisites
@@ -271,6 +323,14 @@ height="57">](https://apps.rustore.ru/app/com.vladpen.cams)
    git push origin main
    git push origin vX.Y.Z
    ```
+
+2. Create a GitHub Release from the tag at:
+   https://github.com/mretallack/cams/releases/new
+   
+   This triggers the CI release job which:
+   - Builds signed APKs for all 4 architectures
+   - Attaches them to the GitHub Release
+   - Distributes the arm64 APK to Firebase testers
 
 ### Update F-Droid
 

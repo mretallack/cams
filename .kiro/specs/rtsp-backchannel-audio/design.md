@@ -78,11 +78,15 @@ Coordinates audio capture, encoding, and sending.
 
 ### 4. UI Integration
 
-**Microphone button** added to `StreamsActivity` toolbar area (alongside existing mute button).
+**Floating microphone button** positioned top-right of the stream view.
 
-- Push-to-talk: `onTouchListener` with ACTION_DOWN → start, ACTION_UP → stop
-- Button visibility controlled by backchannel detection result
-- Visual feedback: button tint change while active
+- **Default state**: Visible with `ic_mic_off` icon (mic with line through it), disabled/inactive
+- **On click (first time)**: Request RECORD_AUDIO permission, then start audio
+- **On click (active)**: Toggle — switches between `ic_mic_off` (inactive) and `ic_mic` (active)
+- **When active**: Icon changes to `ic_mic` (no line), backchannel audio streaming
+- **When inactive**: Icon changes to `ic_mic_off` (line through), audio stops
+- **On app defocus** (`onPause`): Automatically stop audio and reset to inactive state
+- Button hidden entirely if camera doesn't support backchannel
 
 ## Protocol Flow
 
@@ -174,3 +178,30 @@ The AudioRecord callback runs on its own thread. Encoding (G.711 lookup) is triv
 - No new external libraries required
 - Uses Android SDK: `AudioRecord`, `Manifest.permission.RECORD_AUDIO`
 - Reuses existing: RTSP URL parsing, credential storage from `StreamDataModel`
+
+## Testing Strategy
+
+### Unit Tests
+
+Location: `app/src/test/java/com/vladpen/` (same as existing tests, runs in CI via `testDebugUnitTest`)
+
+| Test Class | Coverage |
+|-----------|----------|
+| `G711EncoderTest` | All μ-law/A-law encoding: zero, max positive, max negative, known reference values, symmetry |
+| `BackchannelClientTest` | SDP parsing (find sendonly tracks, extract codec/control), Digest auth computation, RTP packet construction, TCP interleaved framing, RTSP message formatting |
+| `BackchannelManagerTest` | State machine (idle→connecting→active→stopping→idle), start/stop lifecycle, auto-stop on repeated start, error state transitions |
+| `RtpPacketTest` | Header construction, sequence number wrap-around, timestamp increment, SSRC, payload type mapping |
+
+### Integration Tests
+
+Location: `app/src/androidTest/java/com/vladpen/cams/`
+
+| Test | What it verifies |
+|------|-----------------|
+| `BackchannelIntegrationTest` | Full RTSP handshake against a mock RTSP server (loopback), audio data arrives correctly encoded |
+
+### Test Execution
+
+- Unit tests run at each development stage before proceeding to next task
+- Unit tests run in CI on every push/PR (existing `test` job in GitHub Actions)
+- Integration tests run locally with `./gradlew connectedDebugAndroidTest`

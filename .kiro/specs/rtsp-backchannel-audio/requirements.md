@@ -8,14 +8,16 @@ Enable users to speak through their Android device's microphone and have the aud
 
 ### US-1: Talk to Camera
 **As a** user viewing a camera stream,
-**I want to** press and hold a microphone button to speak through the camera's speaker,
+**I want to** tap a microphone button to toggle two-way audio,
 **So that** I can communicate with people near the camera in real-time.
 
 #### Acceptance Criteria
-- WHEN the user presses and holds the microphone button THE SYSTEM SHALL capture audio from the device microphone and send it to the camera speaker via RTSP backchannel
-- WHEN the user releases the microphone button THE SYSTEM SHALL stop capturing and sending audio
-- WHEN audio is being sent THE SYSTEM SHALL display a visual indicator (button highlight/animation)
-- WHEN the camera does not support backchannel THE SYSTEM SHALL hide the microphone button
+- WHEN the stream view loads and backchannel is supported THE SYSTEM SHALL show a floating mic button (top-right) with a crossed-out mic icon
+- WHEN the user taps the mic button THE SYSTEM SHALL start capturing audio and sending it to the camera speaker via RTSP backchannel
+- WHEN audio is being sent THE SYSTEM SHALL change the icon to an active mic (no line through it)
+- WHEN the user taps the mic button again THE SYSTEM SHALL stop capturing and sending audio and show the crossed-out icon
+- WHEN the app loses focus (onPause) THE SYSTEM SHALL automatically stop audio and reset the icon to crossed-out
+- WHEN the camera does not support backchannel THE SYSTEM SHALL hide the microphone button entirely
 
 ### US-2: Backchannel Detection
 **As a** user,

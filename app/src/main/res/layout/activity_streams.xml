@@ -56,4 +56,20 @@
 
     <include android:id="@+id/toolbar" layout="@layout/toolbar" />
 
+    <ImageButton
+        android:id="@+id/btnMic"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/mic_button_background"
+        android:foreground="?android:attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_mic_off"
+        android:scaleType="centerInside"
+        android:padding="12dp"
+        android:visibility="gone"
+        android:contentDescription="@string/mic_toggle"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

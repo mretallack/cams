@@ -288,6 +288,7 @@ class StreamsActivity : AppCompatActivity(), Layout {
         // Mute playback to prevent feedback
         if (fragments.isNotEmpty()) {
             fragments[0].volume = 0
+            fragments[0].mediaPlayer.volume = 0
         }
         Log.d("BACKCHANNEL", "toggleMic: starting with url=$rtspUrl")
 
@@ -326,7 +327,9 @@ class StreamsActivity : AppCompatActivity(), Layout {
         binding.btnMic.setImageResource(R.drawable.ic_mic_off)
         // Restore playback audio
         if (fragments.isNotEmpty()) {
-            fragments[0].volume = if (StreamData.getMute() == 0) 100 else 0
+            val vol = if (StreamData.getMute() == 0) 100 else 0
+            fragments[0].volume = vol
+            fragments[0].mediaPlayer.volume = vol
         }
         onvifScope.launch(Dispatchers.IO) {
             backchannelManager?.stop()

@@ -7,6 +7,8 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -65,7 +67,7 @@ class StreamsActivity : AppCompatActivity(), Layout {
             androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
         ) { granted ->
             if (granted) {
-                toggleMic()
+                startMic()
             } else {
                 com.google.android.material.snackbar.Snackbar.make(
                     binding.root,
@@ -256,7 +258,20 @@ class StreamsActivity : AppCompatActivity(), Layout {
                     backchannelManager = manager
                     withContext(Dispatchers.Main) {
                         binding.btnMic.visibility = View.VISIBLE
-                        binding.btnMic.setOnClickListener { onMicClick() }
+                        binding.btnMic.setOnTouchListener { _, event ->
+                            when (event.action) {
+                                android.view.MotionEvent.ACTION_DOWN -> {
+                                    onMicPress()
+                                    true
+                                }
+                                android.view.MotionEvent.ACTION_UP,
+                                android.view.MotionEvent.ACTION_CANCEL -> {
+                                    onMicRelease()
+                                    true
+                                }
+                                else -> false
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -265,39 +280,50 @@ class StreamsActivity : AppCompatActivity(), Layout {
         }
     }
 
-    private fun onMicClick() {
-        if (micActive) {
-            stopMic()
+    private fun onMicPress() {
+        if (micActive) return
+        // Check permission
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startMic()
         } else {
-            // Check permission
-            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                toggleMic()
-            } else {
-                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-            }
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    private fun toggleMic() {
+    private fun onMicRelease() {
+        if (micActive) {
+            stopMic()
+        }
+    }
+
+    private fun startMic() {
         val stream = StreamData.getById(sourceId) ?: return
         val rtspUrl = StreamData.getUrl(stream, false)
 
         micActive = true
         binding.btnMic.setImageResource(R.drawable.ic_mic)
+        binding.micBorderOverlay.visibility = View.VISIBLE
+        // Haptic feedback on press
+        val vibrator = getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
         // Mute playback to prevent feedback
         if (fragments.isNotEmpty()) {
             fragments[0].volume = 0
             fragments[0].mediaPlayer.volume = 0
         }
-        Log.d("BACKCHANNEL", "toggleMic: starting with url=$rtspUrl")
+        Log.d("BACKCHANNEL", "startMic: starting with url=$rtspUrl")
 
         onvifScope.launch(Dispatchers.IO) {
             try {
                 val manager = backchannelManager ?: BackchannelManager()
                 backchannelManager = manager
+                // Ensure any previous session is fully stopped
+                if (manager.state != BackchannelManager.State.IDLE) {
+                    manager.stop()
+                }
                 val result = manager.start(rtspUrl)
-                Log.d("BACKCHANNEL", "toggleMic: start result=$result")
+                Log.d("BACKCHANNEL", "startMic: start result=$result")
                 if (!result) {
                     withContext(Dispatchers.Main) {
                         stopMic()
@@ -309,7 +335,7 @@ class StreamsActivity : AppCompatActivity(), Layout {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("BACKCHANNEL", "toggleMic error: ${e.message}", e)
+                Log.e("BACKCHANNEL", "startMic error: ${e.message}", e)
                 withContext(Dispatchers.Main) {
                     stopMic()
                     android.widget.Toast.makeText(
@@ -325,6 +351,10 @@ class StreamsActivity : AppCompatActivity(), Layout {
     private fun stopMic() {
         micActive = false
         binding.btnMic.setImageResource(R.drawable.ic_mic_off)
+        binding.micBorderOverlay.visibility = View.GONE
+        // Haptic feedback on release
+        val vibrator = getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
         // Restore playback audio
         if (fragments.isNotEmpty()) {
             val vol = if (StreamData.getMute() == 0) 100 else 0

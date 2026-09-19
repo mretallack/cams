@@ -42,29 +42,34 @@ class BackchannelClient {
 
             val parts = mLine.split(" ")
             if (parts.size < 4) continue
-            val payloadType = parts[3].trim().toIntOrNull() ?: continue
 
-            val rtpmap = block.lines()
-                .firstOrNull { it.startsWith("a=rtpmap:$payloadType ") }
-                ?.substringAfter("a=rtpmap:$payloadType ")
-                ?: continue
+            // Iterate through all payload types listed in m=audio line (supports multi-payload like 97 102 0 8)
+            for (i in 3 until parts.size) {
+                val ptStr = parts[i].trim()
+                val payloadType = ptStr.toIntOrNull() ?: continue
 
-            val codec = when {
-                rtpmap.uppercase().startsWith("PCMU") -> Codec.PCMU
-                rtpmap.uppercase().startsWith("PCMA") -> Codec.PCMA
-                rtpmap.uppercase().contains("MPEG4-GENERIC") -> Codec.AAC
-                else -> continue
+                val rtpmap = block.lines()
+                    .firstOrNull { it.startsWith("a=rtpmap:$payloadType ") }
+                    ?.substringAfter("a=rtpmap:$payloadType ")
+                    ?: continue
+
+                val codec = when {
+                    rtpmap.uppercase().startsWith("PCMU") -> Codec.PCMU
+                    rtpmap.uppercase().startsWith("PCMA") -> Codec.PCMA
+                    rtpmap.uppercase().contains("MPEG4-GENERIC") -> Codec.AAC
+                    else -> continue
+                }
+
+                val sampleRate = rtpmap.split("/").getOrNull(1)?.toIntOrNull() ?: 8000
+
+                val controlUrl = block.lines()
+                    .firstOrNull { it.startsWith("a=control:") }
+                    ?.substringAfter("a=control:")
+                    ?.trim()
+                    ?: continue
+
+                tracks.add(BackchannelTrack(codec, payloadType, sampleRate, controlUrl))
             }
-
-            val sampleRate = rtpmap.split("/").getOrNull(1)?.toIntOrNull() ?: 8000
-
-            val controlUrl = block.lines()
-                .firstOrNull { it.startsWith("a=control:") }
-                ?.substringAfter("a=control:")
-                ?.trim()
-                ?: continue
-
-            tracks.add(BackchannelTrack(codec, payloadType, sampleRate, controlUrl))
         }
 
         // Sort: PCMU first, then PCMA, then AAC
@@ -104,12 +109,24 @@ class BackchannelClient {
      */
     fun detectBackchannel(host: String, port: Int, path: String, username: String, password: String): BackchannelTrack? {
         try {
+            android.util.Log.d("BACKCHANNEL", "detectBackchannel connecting to $host:$port$path")
             connect(host, port)
-            val sdp = describe(host, port, path, username, password) ?: return null
+            val sdp = describe(host, port, path, username, password) 
+            android.util.Log.d("BACKCHANNEL", "detectBackchannel describe sdp length=${sdp?.length ?: 0}")
+            if (sdp == null) {
+                disconnect()
+                return null
+            }
+            android.util.Log.d("BACKCHANNEL", "SDP content:\n$sdp")
             val tracks = parseSdpForBackchannel(sdp)
+            android.util.Log.d("BACKCHANNEL", "Parsed ${tracks.size} backchannel tracks")
+            for (t in tracks) {
+                android.util.Log.d("BACKCHANNEL", "Track: codec=${t.codec}, pt=${t.payloadType}, url=${t.controlUrl}")
+            }
             disconnect()
             return tracks.firstOrNull()
         } catch (e: Exception) {
+            android.util.Log.e("BACKCHANNEL", "detectBackchannel exception: ${e.message}", e)
             disconnect()
             return null
         }

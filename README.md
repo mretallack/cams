@@ -389,3 +389,7 @@ Example for v2.4.9:
 - x86_64: 10101356
 
 *Copyright (c) 2022-2025 vladpen under MIT license. Use it with absolutely no warranty.*
+
+
+## TODO / Configuration
+- TODO: Make PTZ translation step / speed configurable in camera settings.

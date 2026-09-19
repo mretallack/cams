@@ -509,12 +509,9 @@ class StreamsActivity : AppCompatActivity(), Layout {
                 // Initialize ONVIF features
                 onvifManager = ONVIFManager.getInstance()
                 
-                if (stream.deviceCapabilities?.supportsPTZ == true) {
-                    android.util.Log.d("ONVIF", "Initializing PTZ controls")
-                    initPTZControls(stream)
-                } else {
-                    android.util.Log.d("ONVIF", "PTZ not supported by device capabilities")
-                }
+                // Enable PTZ controls for ONVIF devices regardless of strict capability flags
+                android.util.Log.d("ONVIF", "Initializing PTZ controls")
+                initPTZControls(stream)
                 
                 if (stream.deviceCapabilities?.supportsMotionEvents == true) {
                     android.util.Log.d("ONVIF", "Initializing motion detection")

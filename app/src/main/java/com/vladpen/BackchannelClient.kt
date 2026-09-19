@@ -222,12 +222,26 @@ class BackchannelClient {
         val url = "rtsp://$host:$port$path"
         authUsername = username
         authPassword = password
-        // First attempt without auth to get nonce
+        // First attempt without auth to get nonce / auth challenge
         val resp1 = sendRequest("DESCRIBE", url, mapOf(
             "Accept" to "application/sdp",
             "Require" to "www.onvif.org/ver20/backchannel"
         ))
+        android.util.Log.d("BACKCHANNEL", "DESCRIBE resp1 (${resp1.length} chars): ${resp1.take(100)}")
         if (resp1.startsWith("RTSP/1.0 200")) return extractBody(resp1)
+
+        // Check if Basic auth is requested
+        if (resp1.contains("WWW-Authenticate: Basic")) {
+            val authBytes = "$username:$password".toByteArray()
+            val authBase64 = android.util.Base64.encodeToString(authBytes, android.util.Base64.NO_WRAP)
+            val respBasic = sendRequest("DESCRIBE", url, mapOf(
+                "Accept" to "application/sdp",
+                "Require" to "www.onvif.org/ver20/backchannel",
+                "Authorization" to "Basic $authBase64"
+            ))
+            android.util.Log.d("BACKCHANNEL", "DESCRIBE respBasic (${respBasic.length} chars)")
+            if (respBasic.startsWith("RTSP/1.0 200")) return extractBody(respBasic)
+        }
 
         // Parse 401 for digest auth
         authRealm = extractHeaderValue(resp1, "realm")

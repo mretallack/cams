@@ -88,12 +88,3 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: app/build/outputs/apk/release/*.apk
-
-    - name: Upload arm64 APK to Firebase App Distribution
-      uses: wzieba/Firebase-Distribution-Github-Action@v1
-      with:
-        appId: ${{ secrets.FIREBASE_APP_ID }}
-        serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        groups: testers
-        file: app/build/outputs/apk/release/cams-arm64-v8a-release.apk
-        releaseNotes: ${{ github.event.release.body }}

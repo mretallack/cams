@@ -137,10 +137,10 @@ class PTZController(
         
         // Use RelativeMove instead of ContinuousMove (Thingino cameras don't support ContinuousMove)
         val (panDistance, tiltDistance) = when (direction) {
-            PTZDirection.LEFT -> Pair(-0.1f, 0f)
-            PTZDirection.RIGHT -> Pair(0.1f, 0f)
-            PTZDirection.UP -> Pair(0f, 0.1f)
-            PTZDirection.DOWN -> Pair(0f, -0.1f)
+            PTZDirection.LEFT -> Pair(-3.0f, 0f)
+            PTZDirection.RIGHT -> Pair(3.0f, 0f)
+            PTZDirection.UP -> Pair(0f, 3.0f)
+            PTZDirection.DOWN -> Pair(0f, -3.0f)
         }
         
         val moveParams = mapOf(

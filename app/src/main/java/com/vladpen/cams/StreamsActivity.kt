@@ -7,6 +7,8 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -52,8 +54,28 @@ class StreamsActivity : AppCompatActivity(), Layout {
     private var onvifManager: ONVIFManager? = null
     private val onvifScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // Backchannel audio
+    private var backchannelManager: BackchannelManager? = null
+    private var micActive = false
+    private lateinit var micPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Register permission launcher
+        micPermissionLauncher = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (granted) {
+                startMic()
+            } else {
+                com.google.android.material.snackbar.Snackbar.make(
+                    binding.root,
+                    R.string.mic_permission_denied,
+                    com.google.android.material.snackbar.Snackbar.LENGTH_SHORT
+                ).show()
+            }
+        }
         
         // Lock to landscape orientation for better video viewing
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -83,6 +105,7 @@ class StreamsActivity : AppCompatActivity(), Layout {
             }
             initLayout(binding.root)
             initMute()
+            initMic()
         } catch (_: Exception) {
             Log.e("StreamActivity", "Data is corrupted ($sourceType $sourceId), redirect")
             startActivity(
@@ -216,6 +239,133 @@ class StreamsActivity : AppCompatActivity(), Layout {
         binding.btnMute.visibility = View.VISIBLE
     }
 
+    // === Backchannel Mic ===
+
+    private fun initMic() {
+        if (isGroup) return
+        val stream = StreamData.getById(sourceId) ?: return
+        val rtspUrl = StreamData.getUrl(stream, false)
+        Log.d("BACKCHANNEL", "initMic: rtspUrl=$rtspUrl")
+
+        // Detect backchannel support on background thread
+        onvifScope.launch(Dispatchers.IO) {
+            try {
+                val manager = BackchannelManager()
+                Log.d("BACKCHANNEL", "Detecting backchannel...")
+                val supported = manager.detectBackchannel(rtspUrl)
+                Log.d("BACKCHANNEL", "Backchannel supported: $supported")
+                if (supported) {
+                    backchannelManager = manager
+                    withContext(Dispatchers.Main) {
+                        binding.btnMic.visibility = View.VISIBLE
+                        binding.btnMic.setOnTouchListener { _, event ->
+                            when (event.action) {
+                                android.view.MotionEvent.ACTION_DOWN -> {
+                                    onMicPress()
+                                    true
+                                }
+                                android.view.MotionEvent.ACTION_UP,
+                                android.view.MotionEvent.ACTION_CANCEL -> {
+                                    onMicRelease()
+                                    true
+                                }
+                                else -> false
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BACKCHANNEL", "initMic error: ${e.message}", e)
+            }
+        }
+    }
+
+    private fun onMicPress() {
+        if (micActive) return
+        // Check permission
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            startMic()
+        } else {
+            micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun onMicRelease() {
+        if (micActive) {
+            stopMic()
+        }
+    }
+
+    private fun startMic() {
+        val stream = StreamData.getById(sourceId) ?: return
+        val rtspUrl = StreamData.getUrl(stream, false)
+
+        micActive = true
+        binding.btnMic.setImageResource(R.drawable.ic_mic)
+        binding.micBorderOverlay.visibility = View.VISIBLE
+        // Haptic feedback on press
+        val vibrator = getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+        // Mute playback to prevent feedback
+        if (fragments.isNotEmpty()) {
+            fragments[0].volume = 0
+            fragments[0].mediaPlayer.volume = 0
+        }
+        Log.d("BACKCHANNEL", "startMic: starting with url=$rtspUrl")
+
+        onvifScope.launch(Dispatchers.IO) {
+            try {
+                val manager = backchannelManager ?: BackchannelManager()
+                backchannelManager = manager
+                // Ensure any previous session is fully stopped
+                if (manager.state != BackchannelManager.State.IDLE) {
+                    manager.stop()
+                }
+                val result = manager.start(rtspUrl)
+                Log.d("BACKCHANNEL", "startMic: start result=$result")
+                if (!result) {
+                    withContext(Dispatchers.Main) {
+                        stopMic()
+                        android.widget.Toast.makeText(
+                            this@StreamsActivity,
+                            "Failed to start audio",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BACKCHANNEL", "startMic error: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    stopMic()
+                    android.widget.Toast.makeText(
+                        this@StreamsActivity,
+                        "Failed to start audio: ${e.message}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun stopMic() {
+        micActive = false
+        binding.btnMic.setImageResource(R.drawable.ic_mic_off)
+        binding.micBorderOverlay.visibility = View.GONE
+        // Haptic feedback on release
+        val vibrator = getSystemService(Vibrator::class.java)
+        vibrator?.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+        // Restore playback audio
+        if (fragments.isNotEmpty()) {
+            val vol = if (StreamData.getMute() == 0) 100 else 0
+            fragments[0].volume = vol
+            fragments[0].mediaPlayer.volume = vol
+        }
+        onvifScope.launch(Dispatchers.IO) {
+            backchannelManager?.stop()
+        }
+    }
+
     fun hideLoading(streamId: Int) {
         loadings.remove(streamId)
         if (loadings.isEmpty())
@@ -244,6 +394,10 @@ class StreamsActivity : AppCompatActivity(), Layout {
 
     override fun onStop() {
         super.onStop()
+        // Stop mic when app loses focus
+        if (micActive) {
+            stopMic()
+        }
         for (f in fragments) {
             f.release()
         }
@@ -355,12 +509,9 @@ class StreamsActivity : AppCompatActivity(), Layout {
                 // Initialize ONVIF features
                 onvifManager = ONVIFManager.getInstance()
                 
-                if (stream.deviceCapabilities?.supportsPTZ == true) {
-                    android.util.Log.d("ONVIF", "Initializing PTZ controls")
-                    initPTZControls(stream)
-                } else {
-                    android.util.Log.d("ONVIF", "PTZ not supported by device capabilities")
-                }
+                // Enable PTZ controls for ONVIF devices regardless of strict capability flags
+                android.util.Log.d("ONVIF", "Initializing PTZ controls")
+                initPTZControls(stream)
                 
                 if (stream.deviceCapabilities?.supportsMotionEvents == true) {
                     android.util.Log.d("ONVIF", "Initializing motion detection")

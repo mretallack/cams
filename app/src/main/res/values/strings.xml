@@ -34,6 +34,8 @@
     <string name="seek_back">Seek back</string>
     <string name="play_pause">Play/Pause</string>
     <string name="mute">Mute</string>
+    <string name="mic_toggle">Toggle microphone</string>
+    <string name="mic_permission_denied">Microphone permission required for two-way audio</string>
     <string name="group_add">Add group</string>
     <string name="group_name_hint">New group</string>
     <string name="group_cams">Cameras *</string>

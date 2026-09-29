@@ -1,3 +1,10 @@
+## 2.5.0 - 2026-09-26
+
+- Added RTSP Backchannel Audio (Talk-to-Camera) support with push-to-talk microphone button, haptic/visual feedback, and immediate mute toggle
+- Added multi-payload SDP backchannel parsing supporting PCMU, PCMA, and AAC codecs
+- Added Basic Authentication fallback for RTSP backchannel detection on Thingino camera firmware
+- Improved PTZ relative movement speed and responsiveness on Thingino cameras
+
 ## 2.4.8 - 2026-01-27
 
 - Fixed PTZ control for Thingino cameras (now uses RelativeMove instead of ContinuousMove)
